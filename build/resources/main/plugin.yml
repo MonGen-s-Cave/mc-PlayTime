@@ -1,0 +1,8 @@
+name: mc-PlayTime
+version: '1.0.0'
+main: com.mongenscave.mcplaytime.McPlayTime
+api-version: '1.18'
+authors: [ coma112 ]
+soft-depend:
+  - PlaceholderAPI
+folia-supported: true

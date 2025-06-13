@@ -1,0 +1,14 @@
+prefix: "&e[PlayTime]"
+
+messages:
+  invalid-player: "%prefix% &cHelytelen játékos!"
+  player-required: "%prefix% &cEhhez játékos szükséges!"
+  no-permission: "%prefix% &cNincsen ehhez jogod!"
+  reload: "%prefix% &aSikeresen újratöltöttem a fájlokat!"
+  online-time:
+    - ""
+    - "&e&lTIME STATISTICS"
+    - ""
+    - "&e&lHERE &8» &7{time}"
+    - "&e&lGLOBAL &8» &7{totalTime}"
+    - ""

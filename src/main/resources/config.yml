@@ -1,0 +1,11 @@
+server: "lobby"
+
+aliases:
+  - "playtime"
+
+database:
+  host: localhost
+  port: 3306
+  database: coma112
+  username: root
+  password: ""

@@ -1,0 +1,3 @@
+org.bstats:com.mongenscave.mcplaytime.metrics
+com.github.Anon8281.universalScheduler:com.mongenscave.mcplaytime.universalScheduler
+dev.dejvokep.boostedyaml:com.mongenscave.mcplaytime.boostedyaml
