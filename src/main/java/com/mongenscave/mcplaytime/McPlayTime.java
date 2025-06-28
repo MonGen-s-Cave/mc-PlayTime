@@ -3,7 +3,9 @@ package com.mongenscave.mcplaytime;
 import com.github.Anon8281.universalScheduler.UniversalScheduler;
 import com.github.Anon8281.universalScheduler.scheduling.schedulers.TaskScheduler;
 import com.mongenscave.mcplaytime.config.Config;
-import com.mongenscave.mcplaytime.database.MySQL;
+import com.mongenscave.mcplaytime.database.Database;
+import com.mongenscave.mcplaytime.database.impl.H2;
+import com.mongenscave.mcplaytime.database.impl.MySQL;
 import com.mongenscave.mcplaytime.hooks.plugins.PlaceholderAPI;
 import com.mongenscave.mcplaytime.listener.PlayerListener;
 import com.mongenscave.mcplaytime.service.OnlineTimeService;
@@ -26,7 +28,7 @@ public final class McPlayTime extends ZapperJavaPlugin {
     @Getter private Config language;
     @Getter private TaskScheduler scheduler;
     @Getter private OnlineTimeService service;
-    @Getter private MySQL database;
+    @Getter private Database database;
 
     private Config config;
 
@@ -85,11 +87,16 @@ public final class McPlayTime extends ZapperJavaPlugin {
 
         config = loadConfig("config.yml", generalSettings, loaderSettings, updaterSettings);
         language = loadConfig("messages.yml", generalSettings, loaderSettings, updaterSettings);
+        String databaseType = config.getString("database.type", "h2").toLowerCase();
 
-        database = new MySQL();
-        service = new OnlineTimeService();
+        switch (databaseType) {
+            case "mysql" -> database = new MySQL();
+            case "h2" -> database = new H2();
+            default -> database = new H2();
+        }
 
         database.initialize();
+        service = new OnlineTimeService();
     }
 
     @NotNull

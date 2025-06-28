@@ -1,13 +1,15 @@
-package com.mongenscave.mcplaytime.database;
+package com.mongenscave.mcplaytime.database.impl;
 
 import com.mongenscave.mcplaytime.McPlayTime;
 import com.mongenscave.mcplaytime.config.Config;
+import com.mongenscave.mcplaytime.database.Database;
 import com.mongenscave.mcplaytime.model.PlayerData;
 import com.mongenscave.mcplaytime.utils.LoggerUtils;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import lombok.Getter;
 
+import java.io.File;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -17,43 +19,35 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Getter
-public class MySQL {
+public class H2 implements Database {
     private static final McPlayTime plugin = McPlayTime.getInstance();
-    private static final Config config = plugin.getConfiguration();
     private HikariDataSource dataSource;
 
+    @Override
     public void initialize() throws SQLException {
-        String host = config.getString("database.host", "localhost");
-        int port = config.getInt("database.port", 3306);
-        String database = config.getString("database.database", "badge");
-        String username = config.getString("database.username", "root");
-        String password = config.getString("database.password", "");
-        HikariConfig config = new HikariConfig();
+        HikariConfig hikariConfig = new HikariConfig();
 
-        config.setJdbcUrl("jdbc:mysql://" + host + ":" + port + "/" + database + "?useSSL=false&serverTimezone=UTC");
-        config.setUsername(username);
-        config.setPassword(password);
-        config.setDriverClassName("com.mysql.cj.jdbc.Driver");
+        File dataFolder = plugin.getDataFolder();
+        if (!dataFolder.exists()) {
+            dataFolder.mkdirs();
+        }
 
-        config.setMaximumPoolSize(10);
-        config.setMinimumIdle(2);
-        config.setConnectionTimeout(30000);
-        config.setIdleTimeout(600000);
-        config.setMaxLifetime(1800000);
-        config.setLeakDetectionThreshold(60000);
+        String dbPath = new File(dataFolder, "mcplaytime").getAbsolutePath();
+        hikariConfig.setJdbcUrl("jdbc:h2:" + dbPath + ";AUTO_SERVER=TRUE;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE");
+        hikariConfig.setDriverClassName("org.h2.Driver");
 
-        config.addDataSourceProperty("cachePrepStmts", "true");
-        config.addDataSourceProperty("prepStmtCacheSize", "250");
-        config.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
-        config.addDataSourceProperty("useServerPrepStmts", "true");
-        config.addDataSourceProperty("useLocalSessionState", "true");
-        config.addDataSourceProperty("rewriteBatchedStatements", "true");
-        config.addDataSourceProperty("cacheResultSetMetadata", "true");
-        config.addDataSourceProperty("cacheServerConfiguration", "true");
-        config.addDataSourceProperty("elideSetAutoCommits", "true");
-        config.addDataSourceProperty("maintainTimeStats", "false");
+        hikariConfig.setMaximumPoolSize(5);
+        hikariConfig.setMinimumIdle(1);
+        hikariConfig.setConnectionTimeout(30000);
+        hikariConfig.setIdleTimeout(600000);
+        hikariConfig.setMaxLifetime(1800000);
+        hikariConfig.setLeakDetectionThreshold(60000);
 
-        this.dataSource = new HikariDataSource(config);
+        hikariConfig.addDataSourceProperty("cachePrepStmts", "true");
+        hikariConfig.addDataSourceProperty("prepStmtCacheSize", "250");
+        hikariConfig.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
+
+        this.dataSource = new HikariDataSource(hikariConfig);
 
         createTables();
     }
@@ -68,13 +62,14 @@ public class MySQL {
                 session_start BIGINT DEFAULT NULL,
                 last_seen BIGINT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                PRIMARY KEY (uuid, server),
-                INDEX idx_username (username),
-                INDEX idx_server (server),
-                INDEX idx_total_time (total_time),
-                INDEX idx_last_seen (last_seen)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (uuid, server)
+            );
+            
+            CREATE INDEX IF NOT EXISTS idx_username ON onlinetime_players(username);
+            CREATE INDEX IF NOT EXISTS idx_server ON onlinetime_players(server);
+            CREATE INDEX IF NOT EXISTS idx_total_time ON onlinetime_players(total_time);
+            CREATE INDEX IF NOT EXISTS idx_last_seen ON onlinetime_players(last_seen);
             """;
 
         try (Connection conn = getConnection(); PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -82,10 +77,12 @@ public class MySQL {
         }
     }
 
+    @Override
     public Connection getConnection() throws SQLException {
         return dataSource.getConnection();
     }
 
+    @Override
     public CompletableFuture<PlayerData> getPlayerData(UUID uuid, String server) {
         return CompletableFuture.supplyAsync(() -> {
             String sql = "SELECT * FROM onlinetime_players WHERE uuid = ? AND server = ?";
@@ -116,16 +113,12 @@ public class MySQL {
         });
     }
 
+    @Override
     public CompletableFuture<Void> savePlayerData(PlayerData data) {
         return CompletableFuture.runAsync(() -> {
             String sql = """
-                INSERT INTO onlinetime_players (uuid, username, server, total_time, session_start, last_seen)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE
-                username = VALUES(username),
-                total_time = VALUES(total_time),
-                session_start = VALUES(session_start),
-                last_seen = VALUES(last_seen)
+                MERGE INTO onlinetime_players (uuid, username, server, total_time, session_start, last_seen, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 """;
 
             try (Connection conn = getConnection();
@@ -146,6 +139,7 @@ public class MySQL {
         });
     }
 
+    @Override
     public CompletableFuture<ConcurrentHashMap<String, Long>> getTopPlayers(String server, int limit) {
         return CompletableFuture.supplyAsync(() -> {
             ConcurrentHashMap<String, Long> topPlayers = new ConcurrentHashMap<>();
@@ -170,6 +164,7 @@ public class MySQL {
         });
     }
 
+    @Override
     public CompletableFuture<Long> getTotalOnlineTime(UUID uuid) {
         return CompletableFuture.supplyAsync(() -> {
             String sql = "SELECT SUM(total_time) as total FROM onlinetime_players WHERE uuid = ?";
@@ -190,6 +185,7 @@ public class MySQL {
         });
     }
 
+    @Override
     public void close() {
         if (dataSource != null && !dataSource.isClosed()) dataSource.close();
     }

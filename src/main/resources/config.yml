@@ -4,6 +4,9 @@ aliases:
   - "playtime"
 
 database:
+  type: h2 # h2 or mysql
+
+  # MYSQL
   host: localhost
   port: 3306
   database: coma112
